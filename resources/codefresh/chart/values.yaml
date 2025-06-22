@@ -1,0 +1,458 @@
+gitops-runtime:
+  app-proxy:
+    affinity: {}
+    config:
+      argoCdUrl: null
+      argoCdUsername: admin
+      argoWorkflowsInsecure: 'true'
+      argoWorkflowsUrl: null
+      clusterChunkSize: 50
+      cors: https://hermes-onprem-test.cf-op.com
+      env: production
+      logLevel: info
+      skipGitPermissionValidation: 'false'
+    env: {}
+    extraVolumeMounts: []
+    extraVolumes: []
+    fullnameOverride: cap-app-proxy
+    image:
+      pullPolicy: IfNotPresent
+      repository: quay.io/codefresh/cap-app-proxy
+      tag: 1.3591.0
+    image-enrichment:
+      config:
+        clientHeartbeatIntervalInSeconds: 5
+        concurrencyCmKey: imageReportExecutor
+        concurrencyCmName: workflow-synchronization-semaphores
+        images:
+          gitEnrichment:
+            registry: quay.io
+            repository: codefreshplugins/argo-hub-codefresh-csdp-image-enricher-git-info
+            tag: 1.1.13-main
+          jiraEnrichment:
+            registry: quay.io
+            repository: codefreshplugins/argo-hub-codefresh-csdp-image-enricher-jira-info
+            tag: 1.1.13-main
+          reportImage:
+            registry: quay.io
+            repository: codefreshplugins/argo-hub-codefresh-csdp-report-image-info
+            tag: 1.1.13-main
+        podGcStrategy: OnWorkflowCompletion
+        ttlActiveInSeconds: 900
+        ttlAfterCompletionInSeconds: 86400
+      enabled: true
+      serviceAccount:
+        annotations: null
+        create: true
+        name: codefresh-image-enrichment-sa
+    imagePullSecrets: []
+    initContainer:
+      command:
+        - ./init.sh
+      env: {}
+      extraVolumeMounts: []
+      image:
+        pullPolicy: IfNotPresent
+        repository: quay.io/codefresh/cap-app-proxy-init
+        tag: 1.3591.0
+      resources:
+        limits: {}
+        requests:
+          cpu: '0.2'
+          memory: 256Mi
+    livenessProbe:
+      failureThreshold: 10
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 10
+    nameOverride: ''
+    nodeSelector: {}
+    pdb:
+      enabled: false
+      maxUnavailable: ''
+      minAvailable: 1
+    podAnnotations: {}
+    podLabels: {}
+    podSecurityContext: {}
+    readinessProbe:
+      failureThreshold: 3
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 10
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: 1500m
+        ephemeral-storage: 6Gi
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        ephemeral-storage: 2Gi
+        memory: 512Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+    service:
+      port: 3017
+      type: ClusterIP
+    serviceAccount:
+      annotations: {}
+      create: true
+      name: cap-app-proxy
+    serviceMonitor:
+      enabled: false
+      labels: {}
+      name: ''
+    tolerations: []
+  argo-cd:
+    applicationVersioning:
+      enabled: true
+      useApplicationConfiguration: true
+    configs:
+      cm:
+        accounts.admin: apiKey,login
+        application.resourceTrackingMethod: annotation+label
+        resource.customizations.actions.argoproj.io_Rollout: |
+          mergeBuiltinActions: true
+          discovery.lua: |
+            actions = {}
+            local fullyPromoted = obj.status.currentPodHash == obj.status.stableRS
+            actions["pause"] = {["disabled"] = fullyPromoted or obj.spec.paused == true}
+            actions["skip-current-step"] = {["disabled"] = obj.spec.strategy.canary == nil or obj.spec.strategy.canary.steps == nil or obj.status.currentStepIndex == table.getn(obj.spec.strategy.canary.steps)}
+            return actions
+          definitions:
+          - name: pause
+            action.lua: |
+              obj.spec.paused = true
+              return obj
+          - name: skip-current-step
+            action.lua: |
+              if obj.status ~= nil then
+                  if obj.spec.strategy.canary ~= nil and obj.spec.strategy.canary.steps ~= nil and obj.status.currentStepIndex < table.getn(obj.spec.strategy.canary.steps) then
+                      if obj.status.pauseConditions ~= nil and table.getn(obj.status.pauseConditions) > 0 then
+                          obj.status.pauseConditions = nil
+                      end
+                      obj.status.currentStepIndex = obj.status.currentStepIndex + 1
+                  end
+              end
+              return obj
+        timeout.reconciliation: 20s
+      params:
+        application.namespaces: cf-*
+        server.insecure: true
+    crds:
+      install: true
+    enabled: true
+    fullnameOverride: argo-cd
+  argo-events:
+    configs:
+      jetstream:
+        versions:
+          - configReloaderImage: natsio/nats-server-config-reloader:0.16.0
+            metricsExporterImage: natsio/prometheus-nats-exporter:0.15.0
+            natsImage: nats:2.10.21
+            startCommand: /nats-server
+            version: latest
+      nats:
+        versions:
+          - metricsExporterImage: natsio/prometheus-nats-exporter:0.15.0
+            natsStreamingImage: nats-streaming:0.25.6
+            version: 0.22.1
+    crds:
+      install: false
+    fullnameOverride: argo-events
+  argo-rollouts:
+    controller:
+      replicas: 1
+    enabled: true
+    fullnameOverride: argo-rollouts
+    installCRDs: true
+  argo-workflows:
+    crds:
+      install: true
+    enabled: true
+    executor:
+      resources:
+        requests:
+          ephemeral-storage: 10Mi
+    fullnameOverride: argo
+    mainContainer:
+      resources:
+        requests:
+          ephemeral-storage: 10Mi
+    server:
+      authModes:
+        - client
+      baseHref: /workflows/
+  cf-argocd-extras:
+    eventReporter:
+      affinity: {}
+      enabled: true
+      nodeSelector: {}
+      pdb:
+        enabled: false
+      serviceMonitor:
+        main:
+          enabled: false
+      tolerations: []
+    libraryMode: true
+    sourcesServer:
+      affinity: {}
+      enabled: true
+      hpa:
+        enabled: true
+      nodeSelector: {}
+      tolerations: []
+  codefreshWorkflowLogStoreCM:
+    enabled: true
+    endpoint: gitops-workflow-logs.codefresh.io
+    insecure: false
+  event-reporters:
+    rollout:
+      eventSource:
+        affinity: {}
+        nodeSelector: {}
+        replicas: 1
+        resources: {}
+        tolerations: []
+      sensor:
+        affinity: {}
+        env: {}
+        logging:
+          enabled: false
+          intervalSeconds: 0
+        nodeSelector: {}
+        replicas: 1
+        resources: {}
+        retryStrategy:
+          duration: 0
+          factor: 1
+          jitter: 1
+          steps: 3
+        tolerations: []
+      serviceAccount:
+        create: true
+    workflow:
+      eventSource:
+        affinity: {}
+        nodeSelector: {}
+        replicas: 1
+        resources: {}
+        tolerations: []
+      sensor:
+        affinity: {}
+        env: {}
+        logging:
+          enabled: false
+          intervalSeconds: 0
+        nodeSelector: {}
+        replicas: 1
+        resources: {}
+        retryStrategy:
+          duration: 0
+          factor: 1
+          jitter: 1
+          steps: 3
+        tolerations: []
+      serviceAccount:
+        create: true
+  gitops-operator:
+    affinity: {}
+    config:
+      commitStatusPollingInterval: 10s
+      maxConcurrentReleases: 100
+      promotionWrapperTemplate: ''
+      taskPollingInterval: 10s
+      workflowMonitorPollingInterval: 10s
+    crds:
+      additionalLabels: {}
+      annotations: {}
+      install: true
+      keep: false
+    enabled: true
+    fullnameOverride: ''
+    image: {}
+    imagePullSecrets: []
+    libraryMode: true
+    nameOverride: ''
+    nodeSelector: {}
+    podAnnotations: {}
+    podLabels: {}
+    replicaCount: 1
+    resources:
+      limits: {}
+      requests:
+        cpu: 100m
+        memory: 128Mi
+    serviceAccount:
+      annotations: {}
+      create: true
+      name: gitops-operator-controller-manager
+    tolerations: []
+  global:
+    codefresh:
+      accountId: 6852da0ff8cfdd31251396e3
+      apiEventsPath: /2.0/api/events
+      tls:
+        caCerts:
+          secret:
+            annotations: {}
+            content: ''
+            create: false
+            key: ca-bundle.crt
+          secretKeyRef: {}
+        workflowPipelinesGitWebhooks:
+          annotations: {}
+          certificates: {}
+      url: https://hermes-onprem-test.cf-op.com
+      userToken:
+        secretKeyRef:
+          name: codefresh-user-token
+          key: token
+    external-argo-cd:
+      auth:
+        password: ''
+        passwordSecretKeyRef:
+          key: password
+          name: argocd-initial-admin-secret
+        token: ''
+        tokenSecretKeyRef: {}
+        type: password
+        username: admin
+      redis:
+        port: 6379
+        svc: argocd-redis
+      repoServer:
+        port: 8081
+        svc: argocd-repo-server
+      server:
+        image:
+          repository: quay.io/argoproj/argocd
+          tag: v2.14.4
+        port: 80
+        rootpath: ''
+        svc: argocd-server
+    external-argo-rollouts:
+      rollout-reporter:
+        enabled: false
+    nodeSelector: {}
+    runtime:
+      cluster: https://kubernetes.default.svc
+      codefreshHosted: false
+      eventBus:
+        annotations: {}
+        name: codefresh-eventbus
+        nats:
+          native:
+            affinity: {}
+            auth: token
+            containerTemplate:
+              resources:
+                limits:
+                  cpu: 500m
+                  ephemeral-storage: 2Gi
+                  memory: 4Gi
+                requests:
+                  cpu: 200m
+                  ephemeral-storage: 2Gi
+                  memory: 1Gi
+            maxPayload: 4MB
+            nodeSelector: {}
+            replicas: 3
+            tolerations: []
+        pdb:
+          enabled: true
+          minAvailable: 2
+      ingress:
+        annotations: {}
+        className: nginx-internal
+        enabled: true
+        hosts:
+          - idan-onprem-runtime.rnd-sandbox.cf-infra.com
+        labels: {}
+        protocol: https
+        skipValidation: true
+        tls: []
+      ingressUrl: ''
+      isConfigurationRuntime: true
+      name: codefresh
+    tolerations: []
+  installer:
+    affinity: {}
+    argoCdVersionCheck:
+      argoServerLabels:
+        app.kubernetes.io/component: server
+        app.kubernetes.io/part-of: argocd
+    image:
+      pullPolicy: IfNotPresent
+      repository: quay.io/codefresh/gitops-runtime-installer
+      tag: ''
+    nodeSelector: {}
+    skipUsageValidation: false
+    skipValidation: false
+    tolerations: []
+  internal-router:
+    affinity: {}
+    clusterDomain: cluster.local
+    dnsNamespace: kube-system
+    dnsService: kube-dns
+    env: {}
+    fullnameOverride: internal-router
+    image:
+      pullPolicy: IfNotPresent
+      repository: nginxinc/nginx-unprivileged
+      tag: 1.28-alpine3.21
+    imagePullSecrets: []
+    ipv6:
+      enabled: false
+    nameOverride: ''
+    nodeSelector: {}
+    pdb:
+      enabled: false
+      maxUnavailable: ''
+      minAvailable: 1
+    podAnnotations: {}
+    podLabels: {}
+    podSecurityContext: {}
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: '1'
+        memory: 256Mi
+      requests:
+        cpu: '0.2'
+        memory: 128Mi
+    routing: {}
+    securityContext: {}
+    service:
+      port: 80
+      type: ClusterIP
+    serviceAccount:
+      annotations: {}
+      create: true
+      name: ''
+    tolerations: []
+  sealed-secrets:
+    fullnameOverride: sealed-secrets-controller
+    image:
+      registry: quay.io
+      repository: codefresh/sealed-secrets-controller
+      tag: 0.29.0
+    keyrenewperiod: 720h
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 512Mi
+  tunnel-client:
+    affinity: {}
+    enabled: true
+    libraryMode: true
+    nodeSelector: {}
+    tolerations: []
+    tunnelServer:
+      host: register-tunnels.cf-cd.com
+      subdomainHost: tunnels.cf-cd.com
