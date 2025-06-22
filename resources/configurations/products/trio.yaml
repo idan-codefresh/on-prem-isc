@@ -1,0 +1,14 @@
+apiVersion: codefresh.io/v1beta2
+kind: Product
+metadata:
+  name: trio
+spec:
+  promotionTemplate:
+    versionSource:
+      file: values.yaml
+      jsonPath: $.*.tag
+    promotion:
+      values.yaml:
+        jsonPaths:
+          - $.image
+  concurrency: queue
