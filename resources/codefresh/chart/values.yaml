@@ -51,10 +51,10 @@ gitops-runtime:
         - ./init.sh
       env: {}
       extraVolumeMounts: []
-      image:
-        pullPolicy: IfNotPresent
-        repository: quay.io/codefresh/cap-app-proxy-init
-        tag: 1.3591.0
+   #   image:
+   #     pullPolicy: IfNotPresent
+    #    repository: quay.io/codefresh/cap-app-proxy-init
+     #   tag: 1.3591.0
       resources:
         limits: {}
         requests:
