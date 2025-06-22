@@ -15,10 +15,10 @@ gitops-runtime:
     extraVolumeMounts: []
     extraVolumes: []
     fullnameOverride: cap-app-proxy
-    image:
-      pullPolicy: IfNotPresent
-      repository: quay.io/codefresh/cap-app-proxy
-      tag: 1.3591.0
+   # image:
+    #  pullPolicy: IfNotPresent
+     # repository: quay.io/codefresh/cap-app-proxy
+      #tag: 1.3591.0
     image-enrichment:
       config:
         clientHeartbeatIntervalInSeconds: 5
