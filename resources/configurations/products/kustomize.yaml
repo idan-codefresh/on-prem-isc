@@ -5,6 +5,6 @@ metadata:
 spec:
   promotionTemplate:
     versionSource:
-      file: kustomization.yaml
-      jsonPath: $.*.*.newTag
+      file: guestbook-ui-deployment.yaml
+      jsonPath: $.*.*.*.*.*.image
   concurrency: queue
