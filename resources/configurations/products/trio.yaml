@@ -3,6 +3,13 @@ kind: Product
 metadata:
   name: trio
 spec:
+  promotionFlows:
+    - name: prod-dev
+      gitTriggerSelectors:
+        - key: commitMessage
+          operator: In
+          values:
+            - promote
   promotionTemplate:
     versionSource:
       file: values.yaml
